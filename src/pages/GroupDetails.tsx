@@ -833,23 +833,23 @@ const GroupDetails = () => {
                               ${calculateOthersTotalContributions().toFixed(2)}
                             </p>
                             <p className="text-xs text-gray-500 mt-1">Total amount others have paid</p>
-                          </div>
-                        </div>
                       </div>
+                    </div>
+                  </div>
                       
                       <div className={`${userBalanceSummary.netBalance < 0 ? 'bg-red-50 border-red-100' : 'bg-gray-50 border-gray-100'} rounded-lg p-4 border`}>
                         <div className="flex items-center justify-between">
-                          <div>
+        <div>
                             <p className="text-sm font-medium text-gray-800">You Need To Pay</p>
                             <p className={`mt-1 text-2xl font-bold ${userBalanceSummary.netBalance < 0 ? 'text-red-600' : 'text-gray-400'}`}>
                               ${userBalanceSummary.netBalance < 0 ? Math.abs(userBalanceSummary.netBalance).toFixed(2) : '0.00'}
                             </p>
                             <p className="text-xs text-gray-500 mt-1">Amount you need to pay to others</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    
+                  </div>
+                  </div>
+                </div>
+              </div>
+
                     {/* New card: Others Yet to Pay */}
                     <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-100">
                       <div className="flex items-center justify-between">
@@ -859,30 +859,30 @@ const GroupDetails = () => {
                             ${calculateOthersYetToPay().toFixed(2)}
                           </p>
                           <p className="text-xs text-gray-500 mt-1">Amount others still owe you</p>
-                        </div>
-                      </div>
-                    </div>
-                    
+                  </div>
+                  </div>
+              </div>
+
                     {/* Button to view detailed balances */}
                     <div className="text-center py-2 border-t border-gray-100 pt-4">
-                      <button
+                                <button
                         onClick={() => setActiveTab('balances')}
                         className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-500 hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                      >
+                                >
                         View Detailed Balances
-                      </button>
-                    </div>
+                                </button>
+                  </div>
                   </div>
                 ) : (
                   <div className="flex justify-center items-center h-32">
                     <div className="text-center">
                       <p className="text-sm text-gray-500">No expenses yet</p>
-                    </div>
                   </div>
-                )}
-              </div>
             </div>
-          </div>
+          )}
+            </div>
+        </div>
+      </div>
 
       {/* Add Expense Form */}
       {showExpenseForm && (
@@ -1355,7 +1355,7 @@ const GroupDetails = () => {
                           ${userBalanceSummary.owedToYou.toFixed(2)}
                         </p>
                         <p className="text-xs text-gray-500 mt-1">Total amount you've paid so far</p>
-                      </div>
+                  </div>
                     </div>
                   </div>
                 </div>
@@ -1370,9 +1370,9 @@ const GroupDetails = () => {
                           ${calculateOthersTotalContributions().toFixed(2)}
                         </p>
                         <p className="text-xs text-gray-500 mt-1">Total amount others have paid</p>
-                      </div>
                     </div>
                   </div>
+                </div>
                   
                   <div className={`${userBalanceSummary.netBalance < 0 ? 'bg-red-50 border-red-100' : 'bg-gray-50 border-gray-100'} rounded-lg p-4 border`}>
                     <div className="flex items-center justify-between">
@@ -1382,7 +1382,7 @@ const GroupDetails = () => {
                           ${userBalanceSummary.netBalance < 0 ? Math.abs(userBalanceSummary.netBalance).toFixed(2) : '0.00'}
                         </p>
                         <p className="text-xs text-gray-500 mt-1">Amount you need to pay to others</p>
-                      </div>
+              </div>
                     </div>
                   </div>
                 </div>
@@ -1433,7 +1433,7 @@ const GroupDetails = () => {
                                 ${debt.amount.toFixed(2)}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                <button
+                <button
                                   className="text-green-600 bg-green-50 px-3 py-1 rounded-md text-xs hover:bg-green-100"
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -1441,13 +1441,13 @@ const GroupDetails = () => {
                                   }}
                                 >
                                   Mark as Settled
-                                </button>
+                </button>
                               </td>
                             </tr>
                           ))}
                       </tbody>
                     </table>
-                  </div>
+              </div>
                 ) : (
                   <div className="text-center py-6 bg-gray-50 rounded-lg">
                     <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -1455,7 +1455,7 @@ const GroupDetails = () => {
                     </svg>
                     <h3 className="mt-2 text-sm font-medium text-gray-900">No money to receive</h3>
                     <p className="mt-1 text-sm text-gray-500">Nobody owes you any money in this group.</p>
-                  </div>
+            </div>
                 )}
               </div>
 
@@ -1699,10 +1699,10 @@ const GroupDetails = () => {
                     <p className="mt-1 text-sm text-gray-500">You haven't settled any payments with others yet.</p>
                   </div>
                 )}
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        </div>
       )}
 
       {activeTab === 'members' && (
@@ -1757,7 +1757,7 @@ const GroupDetails = () => {
                   )}
                   
                     <div className="mt-2">
-                    <button
+                <button
                       type="submit"
                       disabled={inviteLoading}
                       className={`w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-500 hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 shadow-md hover:shadow-lg ${
@@ -1773,7 +1773,7 @@ const GroupDetails = () => {
                           Send Invitation
                         </>
                       )}
-                    </button>
+                </button>
                     </div>
                   </div>
               </form>
