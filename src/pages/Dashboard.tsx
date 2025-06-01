@@ -16,9 +16,25 @@ interface UserStats {
   overallBalance: number;
 }
 
+interface Group {
+  _id: string;
+  name: string;
+}
+
+interface Expense {
+  _id: string;
+  title: string;
+  amount: number;
+  paidBy: User;
+  groupId: Group;
+  category: string;
+  createdAt: string;
+}
+
 const Dashboard = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [recentExpenses, setRecentExpenses] = useState<Expense[]>([]);
   const [stats, setStats] = useState<UserStats>({
     totalOwed: 0,
     totalOwing: 0,
@@ -43,6 +59,14 @@ const Dashboard = () => {
         // Fetch user stats
         const { data: statsData } = await api.get('/api/users/stats');
         setStats(statsData);
+        
+        // Fetch recent expenses
+        const { data: expensesData } = await api.get('/api/expenses');
+        // Sort by date and get the 3 most recent
+        const sortedExpenses = expensesData.sort(
+          (a: Expense, b: Expense) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        ).slice(0, 3);
+        setRecentExpenses(sortedExpenses);
       } catch (error) {
         console.error('Failed to fetch user data', error);
         // Don't redirect on stats error, just show the profile
@@ -84,40 +108,47 @@ const Dashboard = () => {
       
       {/* User Stats */}
       <UserStats />
-      
-      {user && (
-        <div className="bg-white overflow-hidden shadow-lg rounded-lg">
-          <div className="px-6 py-5 border-b border-gray-200">
-            <h3 className="text-lg leading-6 font-medium text-red-500">User Profile</h3>
-            <p className="mt-1 max-w-2xl text-sm text-gray-500">Personal details</p>
-          </div>
-          <div className="px-6 py-5">
-            <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
-              <div>
-                <dt className="text-sm font-medium text-gray-500">Full name</dt>
-                <dd className="mt-1 text-sm text-gray-900">{user.name}</dd>
-              </div>
-              <div>
-                <dt className="text-sm font-medium text-gray-500">Email address</dt>
-                <dd className="mt-1 text-sm text-gray-900">{user.email}</dd>
-              </div>
-              <div>
-                <dt className="text-sm font-medium text-gray-500">Phone number</dt>
-                <dd className="mt-1 text-sm text-gray-900">{user.phone}</dd>
-              </div>
-            </dl>
-          </div>
-        </div>
-      )}
 
       <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {/* Recent Activity Card */}
         <div className="bg-white overflow-hidden shadow-lg rounded-lg">
-          <div className="px-6 py-5 border-b border-gray-200">
+          <div className="px-6 py-5 border-b border-gray-200 flex justify-between items-center">
             <h3 className="text-lg leading-6 font-medium text-red-500">Recent Activity</h3>
+            <Link to="/expenses" className="text-sm font-medium text-red-500 hover:text-red-700">
+              View All
+            </Link>
           </div>
           <div className="px-6 py-5">
-            <p className="text-sm text-gray-500">No recent activity to show.</p>
+            {recentExpenses.length > 0 ? (
+              <ul className="divide-y divide-gray-200">
+                {recentExpenses.map((expense) => (
+                  <li key={expense._id} className="py-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex flex-col">
+                        <p className="text-sm font-medium text-gray-900">{expense.title}</p>
+                        <div className="flex items-center">
+                          <span className="text-xs text-gray-500">
+                            {new Date(expense.createdAt).toLocaleDateString()}
+                          </span>
+                          <span className="mx-1 text-gray-500">•</span>
+                          <Link 
+                            to={`/groups/${expense.groupId._id}`} 
+                            className="text-xs text-red-500 hover:text-red-700"
+                          >
+                            {expense.groupId.name}
+                          </Link>
+                        </div>
+                      </div>
+                      <div className="text-sm font-semibold text-gray-900">
+                        ${expense.amount.toFixed(2)}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-gray-500">No recent activity to show.</p>
+            )}
           </div>
         </div>
 

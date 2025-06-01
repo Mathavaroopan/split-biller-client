@@ -8,7 +8,10 @@ interface Group {
   name: string;
   members: any[];
   expenses: any[];
-  createdBy: string;
+  createdBy: {
+    _id: string;
+    name: string;
+  };
   createdAt: string;
 }
 
@@ -21,6 +24,8 @@ const Groups = () => {
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [statsTrigger, setStatsTrigger] = useState(0);
+  const [showDeleteModal, setShowDeleteModal] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -75,16 +80,43 @@ const Groups = () => {
     }
   };
 
+  const handleDeleteGroup = async (groupId: string) => {
+    try {
+      setDeleteLoading(true);
+      await api.delete(`/api/groups/${groupId}`);
+      
+      // Update the groups list
+      setGroups(groups.filter(group => group._id !== groupId));
+      setShowDeleteModal(null);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to delete group');
+      console.error('Error deleting group:', err);
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
   // Filter groups by name
   const filteredGroups = groups.filter(group => 
     group.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Get current user ID
+  const currentUserId = localStorage.getItem('userId');
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Groups</h1>
-        <p className="mt-1 text-sm text-gray-500">Manage your expense sharing groups</p>
+      <div className="mb-8 flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Groups</h1>
+          <p className="mt-1 text-sm text-gray-500">Manage your expense sharing groups</p>
+        </div>
+        <button
+          onClick={() => setShowCreateForm(true)}
+          className="px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 shadow-md"
+        >
+          Create Group
+        </button>
       </div>
 
       {/* User Stats Component */}
@@ -96,91 +128,68 @@ const Groups = () => {
         </div>
       )}
 
-      {/* Create Group Card */}
-      <div className="bg-white overflow-hidden shadow-lg rounded-lg mb-8">
-        <div className="px-6 py-5 border-b border-gray-200 flex justify-between items-center">
-          <div>
-            <h3 className="text-lg leading-6 font-medium text-red-500">Create a New Group</h3>
-            <p className="mt-1 text-sm text-gray-500">Start tracking shared expenses with friends, roommates or family</p>
-          </div>
-          <button
-            onClick={() => setShowCreateForm(!showCreateForm)}
-            className="px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-          >
-            {showCreateForm ? 'Cancel' : 'Create Group'}
-          </button>
-        </div>
-
-        {showCreateForm && (
-          <div className="px-6 py-5">
-            <form onSubmit={handleCreateGroup}>
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                <div>
-                  <label htmlFor="group-name" className="block text-sm font-medium text-gray-700">
-                    Group Name
-                  </label>
-                  <input
-                    type="text"
-                    id="group-name"
-                    required
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm"
-                    value={groupName}
-                    onChange={(e) => setGroupName(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="description" className="block text-sm font-medium text-gray-700">
-                    Description (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    id="description"
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm"
-                    value={groupDescription}
-                    onChange={(e) => setGroupDescription(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="mt-6 flex justify-end">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className={`px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 ${
-                    loading ? 'opacity-70 cursor-not-allowed' : ''
-                  }`}
-                >
-                  {loading ? 'Creating...' : 'Create Group'}
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-
-        {!showCreateForm && (
-          <div className="px-6 py-5">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <div className="text-xl font-semibold text-red-500">Track Expenses</div>
-                <p className="mt-2 text-sm text-gray-600">
-                  Easily track who paid for what and split bills fairly
-                </p>
-              </div>
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <div className="text-xl font-semibold text-red-500">Settle Debts</div>
-                <p className="mt-2 text-sm text-gray-600">
-                  See who owes what and settle up with minimal transactions
-                </p>
-              </div>
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <div className="text-xl font-semibold text-red-500">Stay Organized</div>
-                <p className="mt-2 text-sm text-gray-600">
-                  Keep all your shared expenses organized by group
-                </p>
+      {/* Create Group Form Modal */}
+      {showCreateForm && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 transition-opacity" aria-hidden="true" onClick={() => setShowCreateForm(false)}>
+              <div className="absolute inset-0 bg-gray-500 opacity-50"></div>
+            </div>
+            <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            <div className="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6 relative z-50" onClick={(e) => e.stopPropagation()}>
+              <div className="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <h3 className="text-lg font-medium leading-6 text-red-500 mb-4">Create a New Group</h3>
+                
+                <form onSubmit={handleCreateGroup}>
+                  <div className="mb-4">
+                    <label htmlFor="group-name" className="block text-sm font-medium text-gray-700">
+                      Group Name
+                    </label>
+                    <input
+                      type="text"
+                      id="group-name"
+                      required
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm"
+                      value={groupName}
+                      onChange={(e) => setGroupName(e.target.value)}
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+                      Description (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      id="description"
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm"
+                      value={groupDescription}
+                      onChange={(e) => setGroupDescription(e.target.value)}
+                    />
+                  </div>
+                  <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className={`w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-500 text-base font-medium text-white hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm ${
+                        loading ? 'opacity-70 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      {loading ? 'Creating...' : 'Create Group'}
+                    </button>
+                    <button
+                      type="button"
+                      className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:mt-0 sm:w-auto sm:text-sm"
+                      onClick={() => setShowCreateForm(false)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
               </div>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Existing Groups */}
       <div className="mb-6 flex justify-between items-center">
@@ -201,7 +210,7 @@ const Groups = () => {
         </div>
       </div>
 
-      {loading && !showCreateForm ? (
+      {loading ? (
         <div className="flex justify-center items-center py-12">
           <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-500"></div>
         </div>
@@ -210,10 +219,12 @@ const Groups = () => {
           {filteredGroups.map((group) => (
             <div 
               key={group._id}
-              className="bg-white overflow-hidden shadow-lg rounded-lg hover:shadow-xl transition-shadow cursor-pointer"
-              onClick={() => navigate(`/groups/${group._id}`)}
+              className="bg-white overflow-hidden shadow-lg rounded-lg hover:shadow-xl transition-shadow"
             >
-              <div className="px-6 py-5 border-b border-gray-200">
+              <div 
+                className="px-6 py-5 border-b border-gray-200 cursor-pointer" 
+                onClick={() => navigate(`/groups/${group._id}`)}
+              >
                 <h3 className="text-lg leading-6 font-medium text-red-500">{group.name}</h3>
                 {/* Date formatting */}
                 <p className="mt-1 text-sm text-gray-500">
@@ -227,6 +238,19 @@ const Groups = () => {
                     {group.expenses.length} expenses
                   </div>
                 </div>
+                {group.createdBy?._id === currentUserId && (
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowDeleteModal(group._id);
+                      }}
+                      className="w-full text-center text-sm text-red-600 hover:text-red-800"
+                    >
+                      Delete Group
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -246,6 +270,49 @@ const Groups = () => {
               >
                 Create a Group
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Group Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 transition-opacity" aria-hidden="true" onClick={() => setShowDeleteModal(null)}>
+              <div className="absolute inset-0 bg-gray-500 opacity-50"></div>
+            </div>
+            <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            <div className="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6 relative z-50" onClick={(e) => e.stopPropagation()}>
+              <div>
+                <div className="mt-3 text-center">
+                  <h3 className="text-lg leading-6 font-medium text-gray-900">Delete Group</h3>
+                  <div className="mt-2">
+                    <p className="text-sm text-gray-500">
+                      Are you sure you want to delete this group? This action cannot be undone.
+                      All expenses and balances will be permanently removed.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-5 sm:mt-6 sm:grid sm:grid-cols-2 sm:gap-3">
+                <button
+                  type="button"
+                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none sm:text-sm"
+                  onClick={() => handleDeleteGroup(showDeleteModal)}
+                  disabled={deleteLoading}
+                >
+                  {deleteLoading ? 'Deleting...' : 'Delete'}
+                </button>
+                <button
+                  type="button"
+                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:text-sm"
+                  onClick={() => setShowDeleteModal(null)}
+                  disabled={deleteLoading}
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         </div>

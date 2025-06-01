@@ -5,6 +5,10 @@ import Dashboard from './pages/Dashboard';
 import Groups from './pages/Groups';
 import GroupDetails from './pages/GroupDetails';
 import InvitePage from './pages/InvitePage';
+import Settings from './pages/Settings';
+import Expenses from './pages/Expenses';
+import ExpenseDetails from './pages/ExpenseDetails.tsx';
+import Notifications from './pages/Notifications';
 import ProtectedRoute from './components/ProtectedRoute';
 import Navbar from './components/Navbar';
 import './App.css';
@@ -26,8 +30,10 @@ function App() {
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/groups" element={<Groups />} />
               <Route path="/groups/:id" element={<GroupDetails />} />
-              <Route path="/expenses" element={<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6"><h1 className="text-2xl font-bold text-gray-900">Expenses</h1><p className="mt-4">Coming soon...</p></div>} />
-              <Route path="/settings" element={<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6"><h1 className="text-2xl font-bold text-gray-900">Settings</h1><p className="mt-4">Coming soon...</p></div>} />
+              <Route path="/expenses" element={<Expenses />} />
+              <Route path="/notifications" element={<Notifications />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/expense/:id" element={<ExpenseDetails />} />
             </Route>
           </Routes>
         </div>

@@ -1,10 +1,49 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+import api from '../utils/api';
+
+interface Invitation {
+  _id: string;
+  groupId: {
+    _id: string;
+    name: string;
+  };
+  invitedBy: {
+    name: string;
+  };
+  createdAt: string;
+}
 
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [notificationCount, setNotificationCount] = useState(0);
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  
+  // Fetch user invitations
+  useEffect(() => {
+    // Skip for auth pages
+    if (isAuthPage) return;
+    
+    const fetchInvitations = async () => {
+      try {
+        setLoading(true);
+        const { data } = await api.get('/api/invitations');
+        setNotificationCount(data.length);
+      } catch (error) {
+        console.error('Error fetching invitations:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchInvitations();
+    
+    // Refresh notifications every minute
+    const interval = setInterval(fetchInvitations, 60000);
+    return () => clearInterval(interval);
+  }, [location.pathname]);
   
   const handleLogout = () => {
     localStorage.removeItem('userInfo');
@@ -61,6 +100,26 @@ const Navbar = () => {
             >
               Expenses
             </Link>
+            
+            {/* Notifications Link */}
+            <Link
+              to="/notifications"
+              className={`px-3 py-2 rounded-md text-sm font-medium ${
+                location.pathname === '/notifications'
+                  ? 'text-white bg-red-500'
+                  : 'text-gray-700 hover:bg-red-100 hover:text-red-500'
+              }`}
+            >
+              <div className="relative inline-flex items-center">
+                <span>Notifications</span>
+                {notificationCount > 0 && (
+                  <span className="absolute -top-1 -right-3 bg-red-500 text-white rounded-full text-xs w-5 h-5 flex items-center justify-center">
+                    {notificationCount}
+                  </span>
+                )}
+              </div>
+            </Link>
+            
             <Link
               to="/settings"
               className={`px-3 py-2 rounded-md text-sm font-medium ${
@@ -81,6 +140,21 @@ const Navbar = () => {
           
           {/* Mobile menu button */}
           <div className="flex md:hidden">
+            {/* Notifications icon for Mobile */}
+            <Link
+              to="/notifications"
+              className="p-2 rounded-md text-gray-700 hover:text-red-500 hover:bg-red-100 focus:outline-none mr-2"
+            >
+              <div className="relative">
+                <span className="sr-only">Notifications</span>
+                {notificationCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full text-xs w-5 h-5 flex items-center justify-center">
+                    {notificationCount}
+                  </span>
+                )}
+              </div>
+            </Link>
+            
             <button
               onClick={() => setIsMenuOpen(!isMenuOpen)}
               className="inline-flex items-center justify-center p-2 rounded-md text-gray-700 hover:text-red-500 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-red-500"
@@ -162,6 +236,22 @@ const Navbar = () => {
               onClick={() => setIsMenuOpen(false)}
             >
               Expenses
+            </Link>
+            <Link
+              to="/notifications"
+              className={`block px-3 py-2 rounded-md text-base font-medium ${
+                location.pathname === '/notifications'
+                  ? 'text-white bg-red-500'
+                  : 'text-gray-700 hover:bg-red-100 hover:text-red-500'
+              }`}
+              onClick={() => setIsMenuOpen(false)}
+            >
+              Notifications
+              {notificationCount > 0 && (
+                <span className="ml-2 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-red-500 rounded-full">
+                  {notificationCount}
+                </span>
+              )}
             </Link>
             <Link
               to="/settings"

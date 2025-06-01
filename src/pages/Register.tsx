@@ -4,11 +4,13 @@ import api from '../utils/api';
 
 const Register = () => {
   const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [usernameError, setUsernameError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -25,9 +27,31 @@ const Register = () => {
     }
   }, [emailParam]);
 
+  // Validate username
+  const validateUsername = (value: string) => {
+    if (!value) {
+      setUsernameError('Username is required');
+      return false;
+    }
+
+    if (!/^[a-zA-Z0-9_]+$/.test(value)) {
+      setUsernameError('Username can only contain letters, numbers, and underscores');
+      return false;
+    }
+
+    setUsernameError('');
+    return true;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setUsernameError('');
+
+    // Validate username
+    if (!validateUsername(username)) {
+      return;
+    }
 
     // Password validation
     if (password !== confirmPassword) {
@@ -41,6 +65,7 @@ const Register = () => {
       // Register the user
       const { data } = await api.post('/api/auth/register', {
         name,
+        username,
         email,
         phone,
         password,
@@ -117,10 +142,29 @@ const Register = () => {
                   autoComplete="name"
                   required
                   className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                  placeholder="Name"
+                  placeholder="Full Name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                 />
+              </div>
+              <div className="mb-4">
+                <input
+                  id="username"
+                  name="username"
+                  type="text"
+                  autoComplete="username"
+                  required
+                  className={`w-full px-3 py-2 border ${usernameError ? 'border-red-500' : 'border-gray-300'} rounded focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent`}
+                  placeholder="Username (letters, numbers, and _ only)"
+                  value={username}
+                  onChange={(e) => {
+                    setUsername(e.target.value);
+                    validateUsername(e.target.value);
+                  }}
+                />
+                {usernameError && (
+                  <p className="mt-1 text-xs text-red-500">{usernameError}</p>
+                )}
               </div>
               <div className="mb-4">
                 <input
