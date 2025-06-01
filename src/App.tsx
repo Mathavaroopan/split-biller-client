@@ -2,6 +2,9 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
+import Groups from './pages/Groups';
+import GroupDetails from './pages/GroupDetails';
+import InvitePage from './pages/InvitePage';
 import ProtectedRoute from './components/ProtectedRoute';
 import Navbar from './components/Navbar';
 import './App.css';
@@ -16,11 +19,13 @@ function App() {
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/invite/:token" element={<InvitePage />} />
             
             {/* Protected Routes */}
             <Route element={<ProtectedRoute />}>
               <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/groups" element={<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6"><h1 className="text-2xl font-bold text-gray-900">Groups</h1><p className="mt-4">Coming soon...</p></div>} />
+              <Route path="/groups" element={<Groups />} />
+              <Route path="/groups/:id" element={<GroupDetails />} />
               <Route path="/expenses" element={<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6"><h1 className="text-2xl font-bold text-gray-900">Expenses</h1><p className="mt-4">Coming soon...</p></div>} />
               <Route path="/settings" element={<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6"><h1 className="text-2xl font-bold text-gray-900">Settings</h1><p className="mt-4">Coming soon...</p></div>} />
             </Route>

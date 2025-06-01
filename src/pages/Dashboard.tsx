@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import api from '../utils/api';
+import UserStats from '../components/UserStats';
 
 interface User {
   _id: string;
@@ -9,9 +10,20 @@ interface User {
   phone: string;
 }
 
+interface UserStats {
+  totalOwed: number;
+  totalOwing: number;
+  overallBalance: number;
+}
+
 const Dashboard = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<UserStats>({
+    totalOwed: 0,
+    totalOwing: 0,
+    overallBalance: 0
+  });
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -22,20 +34,32 @@ const Dashboard = () => {
       return;
     }
 
-    const fetchUserProfile = async () => {
+    const fetchUserData = async () => {
       try {
-        const { data } = await api.get('/api/auth/me');
-        setUser(data);
+        // Fetch user profile
+        const { data: userData } = await api.get('/api/auth/me');
+        setUser(userData);
+        
+        // Fetch user stats
+        const { data: statsData } = await api.get('/api/users/stats');
+        setStats(statsData);
       } catch (error) {
-        console.error('Failed to fetch user profile', error);
-        localStorage.removeItem('userInfo');
-        navigate('/login');
+        console.error('Failed to fetch user data', error);
+        // Don't redirect on stats error, just show the profile
+        try {
+          const { data: userData } = await api.get('/api/auth/me');
+          setUser(userData);
+        } catch (profileError) {
+          console.error('Failed to fetch user profile', profileError);
+          localStorage.removeItem('userInfo');
+          navigate('/login');
+        }
       } finally {
         setLoading(false);
       }
     };
 
-    fetchUserProfile();
+    fetchUserData();
   }, [navigate]);
 
   const handleLogout = () => {
@@ -57,6 +81,9 @@ const Dashboard = () => {
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
         <p className="mt-1 text-sm text-gray-500">Welcome to your split-billing dashboard</p>
       </div>
+      
+      {/* User Stats */}
+      <UserStats />
       
       {user && (
         <div className="bg-white overflow-hidden shadow-lg rounded-lg">
@@ -94,14 +121,19 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Total Balance Card */}
+        {/* My Groups Card */}
         <div className="bg-white overflow-hidden shadow-lg rounded-lg">
           <div className="px-6 py-5 border-b border-gray-200">
-            <h3 className="text-lg leading-6 font-medium text-red-500">Total Balance</h3>
+            <h3 className="text-lg leading-6 font-medium text-red-500">My Groups</h3>
           </div>
           <div className="px-6 py-5">
-            <p className="text-3xl font-bold text-gray-900">$0.00</p>
-            <p className="mt-1 text-sm text-gray-500">You're all settled up!</p>
+            <p className="text-sm text-gray-500 mb-4">View your groups or create a new one.</p>
+            <Link 
+              to="/groups"
+              className="block w-full px-4 py-2 text-sm text-center font-medium text-white bg-red-500 rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+            >
+              View all groups
+            </Link>
           </div>
         </div>
 
@@ -111,12 +143,12 @@ const Dashboard = () => {
             <h3 className="text-lg leading-6 font-medium text-red-500">Quick Actions</h3>
           </div>
           <div className="px-6 py-5 space-y-2">
-            <button className="w-full px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+            <Link
+              to="/groups"
+              className="block w-full px-4 py-2 text-sm text-center font-medium text-white bg-red-500 rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+            >
               Create a new group
-            </button>
-            <button className="w-full px-4 py-2 text-sm font-medium text-red-500 border border-red-500 rounded-md hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
-              Add an expense
-            </button>
+            </Link>
           </div>
         </div>
       </div>

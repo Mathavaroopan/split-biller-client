@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import api from '../utils/api';
 
 const Login = () => {
@@ -8,6 +8,11 @@ const Login = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Parse query parameters
+  const queryParams = new URLSearchParams(location.search);
+  const redirectUrl = queryParams.get('redirect') || '/dashboard';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -17,11 +22,18 @@ const Login = () => {
     try {
       const { data } = await api.post('/api/auth/login', { email, password });
       
-      // Store user info in localStorage
+      // Store user info and token in localStorage
       localStorage.setItem('userInfo', JSON.stringify(data));
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('userId', data._id);
       
-      // Redirect to dashboard after successful login
-      navigate('/dashboard');
+      // If redirectUrl is an invite link, handle it
+      if (redirectUrl.startsWith('/invite/')) {
+        navigate(redirectUrl);
+      } else {
+        // Otherwise redirect to dashboard or another specified page
+        navigate(redirectUrl);
+      }
     } catch (error: any) {
       setError(
         error.response?.data?.message || 'An unexpected error occurred'
@@ -40,7 +52,7 @@ const Login = () => {
           <h2 className="text-2xl md:text-3xl font-bold mb-4">Hello, Friend!</h2>
           <p className="mb-8">Enter your personal details and start your journey with us</p>
           <Link 
-            to="/register" 
+            to={`/register${location.search}`} 
             className="border border-white text-white px-8 py-2 rounded-full hover:bg-white hover:text-red-500 transition duration-300"
           >
             SIGN UP
@@ -108,7 +120,7 @@ const Login = () => {
               <div className="mt-6 text-center md:hidden">
                 <p className="text-sm text-gray-600">
                   Don't have an account?{' '}
-                  <Link to="/register" className="font-medium text-red-500 hover:text-red-700">
+                  <Link to={`/register${location.search}`} className="font-medium text-red-500 hover:text-red-700">
                     Sign up
                   </Link>
                 </p>

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import api from '../utils/api';
 
 const Register = () => {
@@ -11,6 +11,19 @@ const Register = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Parse query parameters
+  const queryParams = new URLSearchParams(location.search);
+  const inviteToken = queryParams.get('invite');
+  const emailParam = queryParams.get('email');
+
+  // Pre-fill email if provided in URL
+  useEffect(() => {
+    if (emailParam) {
+      setEmail(emailParam);
+    }
+  }, [emailParam]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,6 +38,7 @@ const Register = () => {
     setLoading(true);
 
     try {
+      // Register the user
       const { data } = await api.post('/api/auth/register', {
         name,
         email,
@@ -34,9 +48,24 @@ const Register = () => {
       
       // Store user info in localStorage
       localStorage.setItem('userInfo', JSON.stringify(data));
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('userId', data._id);
       
-      // Redirect to dashboard after successful registration
-      navigate('/dashboard');
+      // If there's an invite token, accept the invitation
+      if (inviteToken) {
+        try {
+          const joinResponse = await api.get(`/api/groups/join/${inviteToken}`);
+          // Redirect to the group page
+          navigate(`/groups/${joinResponse.data.group._id}`);
+        } catch (joinError: any) {
+          console.error('Error joining group:', joinError);
+          // Even if joining the group fails, redirect to dashboard
+          navigate('/dashboard');
+        }
+      } else {
+        // Redirect to dashboard if no invitation
+        navigate('/dashboard');
+      }
     } catch (error: any) {
       setError(
         error.response?.data?.message || 'An unexpected error occurred'
@@ -55,7 +84,7 @@ const Register = () => {
           <h2 className="text-2xl md:text-3xl font-bold mb-4">Welcome Back!</h2>
           <p className="mb-8">To keep connected with us please login with your personal info</p>
           <Link 
-            to="/login" 
+            to={`/login${location.search}`}
             className="border border-white text-white px-8 py-2 rounded-full hover:bg-white hover:text-red-500 transition duration-300"
           >
             SIGN IN
@@ -66,6 +95,12 @@ const Register = () => {
         <div className="w-full md:w-1/2 bg-white p-8 md:p-12">
           <div className="max-w-md mx-auto">
             <h2 className="text-2xl font-bold text-center mb-8 text-red-500">Create Account</h2>
+            
+            {inviteToken && emailParam && (
+              <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-4" role="alert">
+                <span className="block sm:inline">You've been invited to join a group! Complete registration to join.</span>
+              </div>
+            )}
             
             {error && (
               <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
@@ -98,6 +133,8 @@ const Register = () => {
                   placeholder="Email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  // Disable email field if it came from an invitation
+                  readOnly={!!emailParam}
                 />
               </div>
               <div className="mb-4">
@@ -156,7 +193,7 @@ const Register = () => {
               <div className="mt-6 text-center md:hidden">
                 <p className="text-sm text-gray-600">
                   Already have an account?{' '}
-                  <Link to="/login" className="font-medium text-red-500 hover:text-red-700">
+                  <Link to={`/login${location.search}`} className="font-medium text-red-500 hover:text-red-700">
                     Sign in
                   </Link>
                 </p>
