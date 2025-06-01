@@ -6,11 +6,15 @@ interface UserStatsProps {
 }
 
 interface Stats {
-  totalOwed: number;
-  totalOwing: number;
-  overallBalance: number;
+  totalOwed: number; // Money others owe you (you paid for them)
+  totalOwing: number; // Money you owe others (your share of expenses)
+  overallBalance: number; // Net balance (positive: others owe you, negative: you owe others)
   totalGroups: number;
   totalExpenses: number;
+  totalPaid: number; // Total amount you've paid
+  othersPaidYou: number; // Total amount others have paid you
+  youNeedToPay: number; // Amount you need to pay
+  othersYetToPay: number; // Amount others yet to pay you
 }
 
 const UserStats = ({ refreshTrigger = 0 }: UserStatsProps) => {
@@ -19,7 +23,11 @@ const UserStats = ({ refreshTrigger = 0 }: UserStatsProps) => {
     totalOwing: 0,
     overallBalance: 0,
     totalGroups: 0,
-    totalExpenses: 0
+    totalExpenses: 0,
+    totalPaid: 0,
+    othersPaidYou: 0,
+    youNeedToPay: 0,
+    othersYetToPay: 0
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -44,7 +52,7 @@ const UserStats = ({ refreshTrigger = 0 }: UserStatsProps) => {
 
   if (loading) {
     return (
-      <div className="bg-white shadow-md rounded-lg p-6 mb-6">
+      <div className="bg-white shadow-lg rounded-lg p-6 mb-6 border border-gray-100">
         <div className="flex justify-center items-center h-24">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500"></div>
         </div>
@@ -54,7 +62,7 @@ const UserStats = ({ refreshTrigger = 0 }: UserStatsProps) => {
 
   if (error) {
     return (
-      <div className="bg-white shadow-md rounded-lg p-6 mb-6">
+      <div className="bg-white shadow-lg rounded-lg p-6 mb-6 border border-gray-100">
         <div className="text-center text-red-500">
           <p>{error}</p>
         </div>
@@ -63,35 +71,77 @@ const UserStats = ({ refreshTrigger = 0 }: UserStatsProps) => {
   }
 
   return (
-    <div className="bg-white shadow-md rounded-lg p-6 mb-6">
-      <div className="text-center">
-        <h2 className="text-xl font-semibold text-gray-700 mb-1">Pending Receivables</h2>
-        <p className="text-3xl font-bold text-gray-800 mb-4">
-          ${stats.overallBalance.toFixed(2)}
-          <span className="text-base ml-2 font-normal text-gray-500">
-            {stats.overallBalance === 0 
-              ? '(settled up)' 
-              : stats.overallBalance > 0 
-                ? '(others owe you)' 
-                : '(you owe others)'}
-          </span>
-        </p>
-        
-        <div className="grid grid-cols-2 gap-8 mt-6">
-          <div className="bg-gray-50 rounded-lg p-4">
-            <p className="text-sm text-gray-500 mb-1">Your Share</p>
-            <p className="text-xl font-bold text-red-500">
-              ${Math.abs(stats.totalOwing).toFixed(2)}
-            </p>
-            <p className="text-xs text-gray-500 mt-1">How much you owe after splitting expenses</p>
+    <div className="bg-white shadow-xl rounded-lg mb-6 overflow-hidden border border-gray-200">
+      <div className="px-6 py-5 border-b border-gray-200">
+        <h3 className="text-lg leading-6 font-medium text-red-500">Financial Summary</h3>
+      </div>
+      <div className="px-6 py-5">
+        <div className="space-y-6">
+          {/* First row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-red-50 rounded-lg p-4 border border-red-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-red-800">Your Share</p>
+                  <p className="mt-1 text-2xl font-bold text-red-600">
+                    ${stats.totalOwing.toFixed(2)}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">Your total share of expenses</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-green-50 rounded-lg p-4 border border-green-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-green-800">You Paid</p>
+                  <p className="mt-1 text-2xl font-bold text-green-600">
+                    ${stats.totalPaid.toFixed(2)}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">Total amount you've paid so far</p>
+                </div>
+              </div>
+            </div>
           </div>
           
-          <div className="bg-gray-50 rounded-lg p-4">
-            <p className="text-sm text-gray-500 mb-1">Your Total Contributions</p>
-            <p className="text-xl font-bold text-green-500">
-              ${stats.totalOwed.toFixed(2)}
-            </p>
-            <p className="text-xs text-gray-500 mt-1">Total amount you've paid so far</p>
+          {/* Second row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-blue-800">Others Paid You</p>
+                  <p className="mt-1 text-2xl font-bold text-blue-600">
+                    ${stats.othersPaidYou.toFixed(2)}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">Total amount others have paid you</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className={`${stats.youNeedToPay > 0 ? 'bg-red-50 border-red-100' : 'bg-gray-50 border-gray-100'} rounded-lg p-4 border`}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-800">You Need To Pay</p>
+                  <p className={`mt-1 text-2xl font-bold ${stats.youNeedToPay > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                    ${stats.youNeedToPay.toFixed(2)}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">Amount you need to pay to others</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Third row - Others Yet to Pay */}
+          <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-yellow-800">Others Yet to Pay</p>
+                <p className="mt-1 text-2xl font-bold text-yellow-600">
+                  ${stats.othersYetToPay.toFixed(2)}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">Amount others still owe you</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>

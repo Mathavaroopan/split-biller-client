@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 
@@ -34,6 +34,16 @@ interface Group {
   members: User[];
   expenses: string[] | Expense[];
   createdBy: User;
+  createdAt: string;
+}
+
+// Add new interface for chat messages
+interface ChatMessage {
+  _id: string;
+  groupId: string;
+  userId: string;
+  userName: string;
+  text: string;
   createdAt: string;
 }
 
@@ -84,6 +94,15 @@ const GroupDetails = () => {
   // State for expense details modal
   const [selectedExpenseDetails, setSelectedExpenseDetails] = useState<Expense | null>(null);
   
+  // Add new state for chat functionality
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Add state to control invite form visibility
+  const [showInviteForm, setShowInviteForm] = useState(false);
+
   useEffect(() => {
     fetchGroupDetails();
   }, [id]);
@@ -241,6 +260,7 @@ const GroupDetails = () => {
       setInviteSuccess(`Invitation sent to ${inviteEmail}`);
       setInviteEmail('');
       setInviteMessage('');
+      setShowInviteForm(false); // Hide form after successful invite
       
       // Refresh invitations list
       fetchInvitations();
@@ -506,16 +526,34 @@ const GroupDetails = () => {
     
     try {
       const userId = showSettleDebtModal.userId;
-      
-      // Find all relevant expenses between the current user and the selected user
       const currentUserId = localStorage.getItem('userId') || '';
-      const relevantExpenses = expenses.filter(expense => {
-        // Current user is the payer and the other user has an unsettled split
-        return expense.paidBy._id === currentUserId && 
-               expense.splits.some(split => 
-                 split.user._id === userId && !split.settled
-               );
-      });
+      
+      // Check if the debt is one where the current user is owed money (others owe to current user)
+      const isReceivingPayment = directDebts.find(
+        debt => debt.user._id === userId && debt.isUserCreditor
+      );
+      
+      let relevantExpenses = [];
+      
+      if (isReceivingPayment) {
+        // Case: Other user owes money to current user
+        // Find expenses where the current user paid and the other user has an unsettled split
+        relevantExpenses = expenses.filter(expense => {
+          return expense.paidBy._id === currentUserId && 
+                 expense.splits.some(split => 
+                   split.user._id === userId && !split.settled
+                 );
+        });
+      } else {
+        // Case: Current user owes money to other user
+        // Find expenses where the other user paid and the current user has an unsettled split
+        relevantExpenses = expenses.filter(expense => {
+          return expense.paidBy._id === userId && 
+                 expense.splits.some(split => 
+                   split.user._id === currentUserId && !split.settled
+                 );
+        });
+      }
       
       // If no relevant expenses, show message and return
       if (relevantExpenses.length === 0) {
@@ -526,8 +564,9 @@ const GroupDetails = () => {
       
       // Settle each split one by one
       for (const expense of relevantExpenses) {
+        const userToSettle = isReceivingPayment ? userId : currentUserId;
         await api.post(`/api/expenses/${expense._id}/settle-split`, {
-          userId: userId
+          userId: userToSettle
         });
       }
       
@@ -553,26 +592,45 @@ const GroupDetails = () => {
     return expenses.reduce((total, expense) => total + expense.amount, 0);
   };
 
-  // Fix calculation of others' total contribution to use history data
-  const calculateOthersTotalContributions = () => {
-    // Get all expenses paid by others where the current user has a split that is settled
+  // Calculate the total amount others have paid you (settled amounts)
+  const calculateOthersPaidYou = () => {
     const currentUserId = localStorage.getItem('userId') || '';
-    const othersPaidSettledExpenses = expenses.filter(expense => 
+    let totalPaidToYou = 0;
+    
+    // Calculate from expenses where others paid and you settled your share
+    const othersPaidYouSettled = expenses.filter(expense => 
       expense.paidBy._id !== currentUserId &&
       expense.splits.some(split => 
         split.user._id === currentUserId && 
         split.settled
       )
-    );
-    
-    // Sum up the total of the current user's settled splits
-    return othersPaidSettledExpenses.reduce((total, expense) => {
+    ).reduce((total, expense) => {
       const userSplit = expense.splits.find(split => 
         split.user._id === currentUserId && 
         split.settled
       );
       return total + (userSplit?.share || 0);
     }, 0);
+    
+    // Calculate from expenses where you paid and others settled their share to you
+    const youPaidOthersSettled = expenses.filter(expense => 
+      expense.paidBy._id === currentUserId
+    ).reduce((total, expense) => {
+      // Sum up all settled splits by others
+      const settledAmount = expense.splits.reduce((sum, split) => {
+        if (split.user._id !== currentUserId && split.settled) {
+          return sum + split.share;
+        }
+        return sum;
+      }, 0);
+      
+      return total + settledAmount;
+    }, 0);
+    
+    // Combined total of both scenarios
+    totalPaidToYou = othersPaidYouSettled + youPaidOthersSettled;
+    
+    return totalPaidToYou;
   };
 
   // New function to calculate how much others still owe the user
@@ -597,6 +655,64 @@ const GroupDetails = () => {
     });
     
     return totalOwed;
+  };
+
+  // Add function to fetch chat messages
+  const fetchMessages = async () => {
+    if (!id) return;
+    
+    try {
+      setLoadingMessages(true);
+      const { data } = await api.get(`/api/groups/${id}/messages`);
+      setMessages(data);
+    } catch (err: any) {
+      console.error('Error fetching messages:', err);
+    } finally {
+      setLoadingMessages(false);
+    }
+  };
+
+  // Add useEffect to fetch messages when chat tab is active
+  useEffect(() => {
+    if (activeTab === 'chat') {
+      fetchMessages();
+      
+      // Set up polling to refresh messages every 10 seconds
+      const intervalId = setInterval(() => {
+        fetchMessages();
+      }, 10000);
+      
+      return () => clearInterval(intervalId);
+    }
+  }, [activeTab, id]);
+
+  // Add useEffect to scroll to bottom when new messages arrive
+  useEffect(() => {
+    if (activeTab === 'chat' && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, activeTab]);
+
+  // Add function to send a new message
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!newMessage.trim()) return;
+    
+    try {
+      await api.post(`/api/groups/${id}/messages`, { text: newMessage });
+      setNewMessage('');
+      fetchMessages(); // Refresh messages
+    } catch (err: any) {
+      console.error('Error sending message:', err);
+      setError('Failed to send message');
+    }
+  };
+  
+  // Format timestamp for chat messages
+  const formatMessageTime = (timestamp: string) => {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   if (error) {
@@ -711,6 +827,16 @@ const GroupDetails = () => {
             History
           </button>
           <button
+            onClick={() => setActiveTab('chat')}
+            className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'chat'
+                ? 'border-red-500 text-red-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Chat
+          </button>
+          <button
             onClick={() => setActiveTab('members')}
             className={`py-4 px-1 border-b-2 font-medium text-sm ${
               activeTab === 'members'
@@ -801,11 +927,11 @@ const GroupDetails = () => {
                       <div className="bg-red-50 rounded-lg p-4 border border-red-100">
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-sm font-medium text-red-800">Your Share</p>
+                            <p className="text-sm font-medium text-red-800">YOU OWE</p>
                             <p className="mt-1 text-2xl font-bold text-red-600">
                               ${userBalanceSummary.youOwe.toFixed(2)}
                             </p>
-                            <p className="text-xs text-gray-500 mt-1">How much you owe after splitting expenses</p>
+                            <p className="text-xs text-gray-500 mt-1">Your total share of expenses</p>
                           </div>
                         </div>
                       </div>
@@ -813,7 +939,7 @@ const GroupDetails = () => {
                       <div className="bg-green-50 rounded-lg p-4 border border-green-100">
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-sm font-medium text-green-800">Your Total Contributions</p>
+                            <p className="text-sm font-medium text-green-800">YOU PAID</p>
                             <p className="mt-1 text-2xl font-bold text-green-600">
                               ${userBalanceSummary.owedToYou.toFixed(2)}
                             </p>
@@ -828,11 +954,11 @@ const GroupDetails = () => {
                       <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-sm font-medium text-blue-800">Others' Total Contributions</p>
+                            <p className="text-sm font-medium text-blue-800">Others Paid You</p>
                             <p className="mt-1 text-2xl font-bold text-blue-600">
-                              ${calculateOthersTotalContributions().toFixed(2)}
+                              ${calculateOthersPaidYou().toFixed(2)}
                             </p>
-                            <p className="text-xs text-gray-500 mt-1">Total amount others have paid</p>
+                            <p className="text-xs text-gray-500 mt-1">Total amount others have paid you</p>
                       </div>
                     </div>
                   </div>
@@ -1338,11 +1464,11 @@ const GroupDetails = () => {
                   <div className="bg-red-50 rounded-lg p-4 border border-red-100">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-red-800">Your Share</p>
+                        <p className="text-sm font-medium text-red-800">YOU OWE</p>
                         <p className="mt-1 text-xl font-bold text-red-600">
                           ${userBalanceSummary.youOwe.toFixed(2)}
                         </p>
-                        <p className="text-xs text-gray-500 mt-1">How much you owe after splitting expenses</p>
+                        <p className="text-xs text-gray-500 mt-1">Your total share of expenses</p>
                       </div>
                     </div>
                   </div>
@@ -1350,7 +1476,7 @@ const GroupDetails = () => {
                   <div className="bg-green-50 rounded-lg p-4 border border-green-100">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-green-800">Your Total Contributions</p>
+                        <p className="text-sm font-medium text-green-800">YOU PAID</p>
                         <p className="mt-1 text-xl font-bold text-green-600">
                           ${userBalanceSummary.owedToYou.toFixed(2)}
                         </p>
@@ -1365,11 +1491,11 @@ const GroupDetails = () => {
                   <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-blue-800">Others' Total Contributions</p>
+                        <p className="text-sm font-medium text-blue-800">Others Paid You</p>
                         <p className="mt-1 text-xl font-bold text-blue-600">
-                          ${calculateOthersTotalContributions().toFixed(2)}
+                          ${calculateOthersPaidYou().toFixed(2)}
                         </p>
-                        <p className="text-xs text-gray-500 mt-1">Total amount others have paid</p>
+                        <p className="text-xs text-gray-500 mt-1">Total amount others have paid you</p>
                     </div>
                   </div>
                 </div>
@@ -1392,7 +1518,7 @@ const GroupDetails = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-yellow-800">Others Yet to Pay</p>
-                      <p className="mt-1 text-xl font-bold text-yellow-600">
+                      <p className="mt-1 text-2xl font-bold text-yellow-600">
                         ${calculateOthersYetToPay().toFixed(2)}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">Amount others still owe you</p>
@@ -1524,7 +1650,7 @@ const GroupDetails = () => {
             <div className="px-6 py-5">
               {/* Money You Paid Section */}
               <div className="mb-8">
-                <h4 className="text-md font-medium text-gray-900 mb-4">Money You Paid</h4>
+                <h4 className="text-md font-medium text-gray-900 mb-4">Money Others Paid You</h4>
                 
                 {expenses.filter(expense => 
                   expense.paidBy._id === localStorage.getItem('userId') &&
@@ -1538,7 +1664,7 @@ const GroupDetails = () => {
                             Title
                           </th>
                           <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Paid To
+                            Paid By
                           </th>
                           <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Date
@@ -1614,7 +1740,7 @@ const GroupDetails = () => {
 
               {/* Money Others Paid You */}
               <div>
-                <h4 className="text-md font-medium text-gray-900 mb-4">Money Others Paid You</h4>
+                <h4 className="text-md font-medium text-gray-900 mb-4">Money You Paid</h4>
                 
                 {expenses.filter(expense => 
                   expense.paidBy._id !== localStorage.getItem('userId') &&
@@ -1631,7 +1757,7 @@ const GroupDetails = () => {
                             Title
                           </th>
                           <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Paid By
+                            Paid To
                           </th>
                           <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Date
@@ -1705,167 +1831,264 @@ const GroupDetails = () => {
               </div>
       )}
 
+      {activeTab === 'chat' && (
+        <div className={`bg-white ${enhancedShadowClass} rounded-lg overflow-hidden mb-6`}>
+          <div className="px-6 py-5 border-b border-gray-200">
+            <h3 className="text-lg leading-6 font-medium text-red-500">Group Chat</h3>
+          </div>
+          
+          <div className="flex flex-col h-[500px]">
+            {/* Messages Container */}
+            <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
+              {loadingMessages && messages.length === 0 ? (
+                <div className="flex justify-center items-center h-full">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500"></div>
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-gray-500">
+                  <svg className="w-12 h-12 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                  </svg>
+                  <p>No messages yet. Start the conversation!</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {messages.map((message) => {
+                    const isCurrentUser = message.userId === localStorage.getItem('userId');
+                    
+                    return (
+                      <div 
+                        key={message._id} 
+                        className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}
+                      >
+                        <div 
+                          className={`max-w-xs sm:max-w-md lg:max-w-lg rounded-lg px-4 py-2 ${
+                            isCurrentUser 
+                              ? 'bg-red-100 text-red-900' 
+                              : 'bg-gray-200 text-gray-900'
+                          }`}
+                        >
+                          {!isCurrentUser && (
+                            <p className="text-xs font-semibold mb-1">{message.userName}</p>
+                          )}
+                          <p className="text-sm">{message.text}</p>
+                          <p className="text-xs text-right mt-1 opacity-70">
+                            {formatMessageTime(message.createdAt)}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div ref={messagesEndRef} />
+                </div>
+              )}
+            </div>
+            
+            {/* Message Input Form */}
+            <div className="p-4 border-t border-gray-200">
+              <form onSubmit={handleSendMessage} className="flex space-x-2">
+                <input
+                  type="text"
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  placeholder="Type a message..."
+                  className="flex-1 border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                />
+                <button
+                  type="submit"
+                  disabled={!newMessage.trim()}
+                  className={`inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-500 hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 ${
+                    !newMessage.trim() ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                >
+                  Send
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
       {activeTab === 'members' && (
         <div>
-          {/* Invite Member Card */}
+          {/* Invite Member Button & Card */}
           <div className={`bg-white ${enhancedShadowClass} rounded-lg overflow-hidden mb-6`}>
-            <div className="px-6 py-5 border-b border-gray-200">
-              <h3 className="text-lg leading-6 font-medium text-red-500">Invite New Member</h3>
-            </div>
-            <div className="px-6 py-5">
-              <form onSubmit={handleInviteMember}>
-                <div className="space-y-4">
-                  <div>
-                    <label htmlFor="invite-email" className="block text-sm font-medium text-gray-700">
-                      Email Address
-                    </label>
-                    <input
-                      type="email"
-                      id="invite-email"
-                      required
-                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm"
-                      placeholder="friend@example.com"
-                      value={inviteEmail}
-                      onChange={(e) => setInviteEmail(e.target.value)}
-                    />
-                  </div>
-                  
-                  <div>
-                    <label htmlFor="invite-message" className="block text-sm font-medium text-gray-700">
-                      Personal Message (Optional)
-                    </label>
-                    <textarea
-                      id="invite-message"
-                      rows={2}
-                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm"
-                      placeholder="Join our group to split expenses!"
-                      value={inviteMessage}
-                      onChange={(e) => setInviteMessage(e.target.value)}
-                    />
-                  </div>
-                  
-                  {error && (
-                    <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
-                      <span className="block sm:inline">{error}</span>
-                  </div>
-                  )}
-                  
-                  {inviteSuccess && (
-                    <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative" role="alert">
-                      <span className="block sm:inline">{inviteSuccess}</span>
-                    </div>
-                  )}
-                  
-                    <div className="mt-2">
+            <div className="px-6 py-5 border-b border-gray-200 flex justify-between items-center">
+              <h3 className="text-lg leading-6 font-medium text-red-500">Group Members</h3>
+              {!showInviteForm && (
                 <button
-                      type="submit"
-                      disabled={inviteLoading}
-                      className={`w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-500 hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 shadow-md hover:shadow-lg ${
-                        inviteLoading ? 'opacity-70 cursor-not-allowed' : ''
-                      }`}
-                    >
-                      {inviteLoading ? (
-                        <>
-                          Sending Invitation...
-                        </>
-                      ) : (
-                        <>
-                          Send Invitation
-                        </>
-                      )}
+                  onClick={() => setShowInviteForm(true)}
+                  className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-500 hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                >
+                  Invite Members
                 </button>
+              )}
+            </div>
+            
+            {/* Invite Form - Only shown when showInviteForm is true */}
+            {showInviteForm && (
+              <div className="px-6 py-5 border-b border-gray-200 bg-gray-50">
+                <div className="flex justify-between items-center mb-4">
+                  <h4 className="text-md font-medium text-gray-900">Invite New Member</h4>
+                  <button
+                    onClick={() => setShowInviteForm(false)}
+                    className="text-gray-400 hover:text-gray-500"
+                  >
+                    <span className="sr-only">Close</span>
+                    <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                
+                <form onSubmit={handleInviteMember}>
+                  <div className="space-y-4">
+                    <div>
+                      <label htmlFor="invite-email" className="block text-sm font-medium text-gray-700">
+                        Email Address
+                      </label>
+                      <input
+                        type="email"
+                        id="invite-email"
+                        required
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm"
+                        placeholder="friend@example.com"
+                        value={inviteEmail}
+                        onChange={(e) => setInviteEmail(e.target.value)}
+                      />
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="invite-message" className="block text-sm font-medium text-gray-700">
+                        Personal Message (Optional)
+                      </label>
+                      <textarea
+                        id="invite-message"
+                        rows={2}
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm"
+                        placeholder="Join our group to split expenses!"
+                        value={inviteMessage}
+                        onChange={(e) => setInviteMessage(e.target.value)}
+                      />
+                    </div>
+                    
+                    {error && (
+                      <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                        <span className="block sm:inline">{error}</span>
+                      </div>
+                    )}
+                    
+                    {inviteSuccess && (
+                      <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative" role="alert">
+                        <span className="block sm:inline">{inviteSuccess}</span>
+                      </div>
+                    )}
+                    
+                    <div className="mt-2 flex space-x-3">
+                      <button
+                        type="button"
+                        onClick={() => setShowInviteForm(false)}
+                        className="inline-flex justify-center items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={inviteLoading}
+                        className={`flex-1 inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-500 hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 shadow-md hover:shadow-lg ${
+                          inviteLoading ? 'opacity-70 cursor-not-allowed' : ''
+                        }`}
+                      >
+                        {inviteLoading ? 'Sending Invitation...' : 'Send Invitation'}
+                      </button>
                     </div>
                   </div>
-              </form>
-              
-              <div className="mt-6 border-t border-gray-200 pt-4">
-                <h4 className="text-sm font-medium text-gray-900">How it works:</h4>
-                <ol className="mt-2 text-sm text-gray-600 space-y-1 list-decimal list-inside">
-                  <li>Enter your friend's email address</li>
-                  <li>They'll receive an invitation with a secure link</li>
-                  <li>Once they accept, they'll join the group automatically</li>
-                </ol>
+                </form>
+                
+                <div className="mt-6 border-t border-gray-200 pt-4">
+                  <h4 className="text-sm font-medium text-gray-900">How it works:</h4>
+                  <ol className="mt-2 text-sm text-gray-600 space-y-1 list-decimal list-inside">
+                    <li>Enter your friend's email address</li>
+                    <li>They'll receive an invitation with a secure link</li>
+                    <li>Once they accept, they'll join the group automatically</li>
+                  </ol>
                 </div>
               </div>
-          </div>
+            )}
 
-          {/* Pending Invitations */}
-          {invitations.length > 0 && (
-            <div className={`bg-white ${enhancedShadowClass} rounded-lg overflow-hidden mb-6`}>
-              <div className="px-6 py-5 border-b border-gray-200">
-                <h3 className="text-lg leading-6 font-medium text-red-500">Pending Invitations</h3>
+            {/* Pending Invitations */}
+            {invitations.length > 0 && (
+              <div className="border-b border-gray-200">
+                <div className="px-6 py-4 bg-yellow-50">
+                  <h3 className="text-sm font-medium text-yellow-800">Pending Invitations</h3>
+                </div>
+                <ul className="divide-y divide-gray-200">
+                  {invitations.map((invitation) => (
+                    <li key={invitation._id} className="px-6 py-4 flex items-center justify-between">
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-900">{invitation.email}</h4>
+                        <p className="text-xs text-gray-500">
+                          Sent {new Date(invitation.createdAt).toLocaleDateString()} • Expires in {Math.ceil((new Date(invitation.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))} days
+                        </p>
+                      </div>
+                      <div>
+                        <button
+                          onClick={() => {
+                            // Validate invitation ID first
+                            if (!invitation._id) {
+                              setError('Invalid invitation ID');
+                              return;
+                            }
+                            
+                            // Ensure we have the complete ID (MongoDB ObjectIDs are 24 characters)
+                            const inviteId = invitation._id.toString();
+                            console.log('Using invitation ID for resend:', inviteId);
+                            
+                            if (inviteId.length !== 24) {
+                              console.error('Invalid ObjectID length:', inviteId);
+                              setError('Invalid invitation ID format');
+                              return;
+                            }
+                            
+                            // Resend invitation
+                            setInviteLoading(true);
+                            setError('');
+                            setInviteSuccess('');
+                            
+                            try {
+                              api.post(`/api/groups/${id}/invite/resend/${inviteId}`)
+                                .then((response) => {
+                                  console.log('Invitation resent successfully:', response.data);
+                                  setInviteSuccess(`Invitation resent to ${invitation.email}`);
+                                  // Refresh invitations list to update expiry dates
+                                  fetchInvitations();
+                                })
+                                .catch((err) => {
+                                  console.error('Error resending invitation:', err);
+                                  setError(err.response?.data?.message || 'Failed to resend invitation');
+                                })
+                                .finally(() => {
+                                  setInviteLoading(false);
+                                });
+                            } catch (error) {
+                              console.error('Exception in resend invitation:', error);
+                              setError('An unexpected error occurred');
+                              setInviteLoading(false);
+                            }
+                          }}
+                          disabled={inviteLoading}
+                          className="text-xs text-red-600 hover:text-red-900"
+                        >
+                          {inviteLoading ? 'Sending...' : 'Resend'}
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <ul className="divide-y divide-gray-200">
-                {invitations.map((invitation) => (
-                  <li key={invitation._id} className="px-6 py-4 flex items-center justify-between">
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-900">{invitation.email}</h4>
-                      <p className="text-xs text-gray-500">
-                        Sent {new Date(invitation.createdAt).toLocaleDateString()} • Expires in {Math.ceil((new Date(invitation.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))} days
-                      </p>
-                    </div>
-                    <div>
-                <button
-                        onClick={() => {
-                          // Validate invitation ID first
-                          if (!invitation._id) {
-                            setError('Invalid invitation ID');
-                            return;
-                          }
-                          
-                          // Ensure we have the complete ID (MongoDB ObjectIDs are 24 characters)
-                          const inviteId = invitation._id.toString();
-                          console.log('Using invitation ID for resend:', inviteId);
-                          
-                          if (inviteId.length !== 24) {
-                            console.error('Invalid ObjectID length:', inviteId);
-                            setError('Invalid invitation ID format');
-                            return;
-                          }
-                          
-                          // Resend invitation
-                          setInviteLoading(true);
-                          setError('');
-                          setInviteSuccess('');
-                          
-                          try {
-                            api.post(`/api/groups/${id}/invite/resend/${inviteId}`)
-                              .then((response) => {
-                                console.log('Invitation resent successfully:', response.data);
-                                setInviteSuccess(`Invitation resent to ${invitation.email}`);
-                                // Refresh invitations list to update expiry dates
-                                fetchInvitations();
-                              })
-                              .catch((err) => {
-                                console.error('Error resending invitation:', err);
-                                setError(err.response?.data?.message || 'Failed to resend invitation');
-                              })
-                              .finally(() => {
-                                setInviteLoading(false);
-                              });
-                          } catch (error) {
-                            console.error('Exception in resend invitation:', error);
-                            setError('An unexpected error occurred');
-                            setInviteLoading(false);
-                          }
-                        }}
-                        disabled={inviteLoading}
-                        className="text-xs text-red-600 hover:text-red-900"
-                >
-                        {inviteLoading ? 'Sending...' : 'Resend'}
-                </button>
-              </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+            )}
 
-          {/* Members List */}
-          <div className={`bg-white ${enhancedShadowClass} rounded-lg overflow-hidden`}>
-            <div className="px-6 py-5 border-b border-gray-200">
-              <h3 className="text-lg leading-6 font-medium text-red-500">Group Members</h3>
-          </div>
+            {/* Members List */}
             <ul className="divide-y divide-gray-200">
               {group.members.map((member) => (
                 <li key={member._id} className="px-6 py-4 flex items-center justify-between">
